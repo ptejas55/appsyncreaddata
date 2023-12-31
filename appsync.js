@@ -1,123 +1,131 @@
+Step 1: Set Up MongoDB
+Create a MongoDB Atlas account or use an existing one.
+Set up a new cluster and a database in MongoDB Atlas.
+Create a collection within your database, representing your vehicle-related data.
+Step 2: Create an AppSync API
+Open the AWS Management Console and navigate to the AppSync service.
 
-Certainly! Let's go through the steps from scratch, including the setup of MongoDB, AWS AppSync, and the implementation of resolvers.
+Click on "Create API."
 
-Step 1: Set Up MongoDB Atlas
-Sign up for MongoDB Atlas: https://www.mongodb.com/cloud/atlas
-Create a new cluster and a database.
-Set up a collection, for example, a "vehicles" collection, to store vehicle-related data.
-Step 2: Set Up AWS AppSync
-Go to the AWS Management Console and navigate to the AppSync service.
-Click "Create API" and choose the "Build from scratch" option.
-Enter a name for your API and click "Create."
-Step 3: Define a GraphQL Schema in AppSync
-In the AppSync console, navigate to the "Schema" section and define a GraphQL schema.
+Choose "Build from scratch."
+
+Enter a name for your API (e.g., VehicleDataAPI).
+
+Click on "Create."
+
+In the "Schema" section, define a GraphQL schema (schema.graphql). For example:
 
 graphql
 Copy code
 type Vehicle {
-  _id: ID!
+  id: ID!
   make: String!
   model: String!
   year: Int!
 }
 
 type Query {
-  getVehicles: [Vehicle]
+  getVehicle(id: ID!): Vehicle
+  listVehicles: [Vehicle]
 }
-Step 4: Set Up Data Sources and Resolvers
-In the AppSync console, go to the "Data" tab and click "Create data source."
-Choose "HTTP" as the data source type and enter a name (e.g., "MongoDBDataSource").
-In the "Configure settings" section, enter the MongoDB connection string as the endpoint.
-Create a resolver for the getVehicles query:
-Connect it to the MongoDB data source.
-In the mapping template, use the following VTL (Velocity Template Language) code:
-vtl
+Click on "Save Schema" and then "Deploy."
+
+Step 3: Set Up a MongoDB Data Source
+In the AppSync console, go to the "Data" section.
+Click on "Create" to add a new data source.
+Choose "Create a new data source."
+Enter a name for the data source (e.g., VehicleMongoDB).
+Select the data source type as "AWS Lambda function."
+Step 4: Set Up a Lambda Function Resolver
+In the "Resolvers" section of the AppSync console, click on "Create Resolver" for the getVehicle query.
+
+For the data source, select the data source you created in Step 3 (VehicleMongoDB).
+
+Choose "Create a new Lambda function."
+
+Enter a name for the function (e.g., GetVehicleFunction).
+
+In the "Function code" section, use the following example code:
+
+javascript
 Copy code
-{
-  "version" : "2018-05-29",
-  "operation" : "Invoke",
-  "payload": {
-    "field": "getVehicles"
+const { MongoClient } = require("mongodb");
+
+exports.handler = async (event) => {
+    const uri = "YOUR_MONGODB_CONNECTION_STRING";
+    const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true });
+
+    try {
+        await client.connect();
+
+        const database = client.db("YOUR_MONGODB_DATABASE");
+        const collection = database.collection("YOUR_MONGODB_COLLECTION");
+
+        const result = await collection.findOne({ _id: event.arguments.id });
+
+        return result;
+    } finally {
+        await client.close();
+    }
+};
+Replace YOUR_MONGODB_CONNECTION_STRING, YOUR_MONGODB_DATABASE, and YOUR_MONGODB_COLLECTION with your MongoDB connection string, database name, and collection name.
+
+Click on "Create Resolver."
+
+Step 5: Create a Resolver for listVehicles
+Similarly, create a resolver for the listVehicles query using a Lambda function:
+
+javascript
+Copy code
+const { MongoClient } = require("mongodb");
+
+exports.handler = async () => {
+    const uri = "YOUR_MONGODB_CONNECTION_STRING";
+    const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true });
+
+    try {
+        await client.connect();
+
+        const database = client.db("YOUR_MONGODB_DATABASE");
+        const collection = database.collection("YOUR_MONGODB_COLLECTION");
+
+        const result = await collection.find({}).toArray();
+
+        return result;
+    } finally {
+        await client.close();
+    }
+};
+Replace YOUR_MONGODB_CONNECTION_STRING, YOUR_MONGODB_DATABASE, and YOUR_MONGODB_COLLECTION with your MongoDB connection string, database name, and collection name.
+
+Click on "Create Resolver."
+
+Step 6: Test the Queries
+In the AppSync console, go to the "Queries" section.
+
+Create new queries:
+
+graphql
+Copy code
+query GetSingleVehicle {
+  getVehicle(id: "your-vehicle-id") {
+    id
+    make
+    model
+    year
   }
 }
-Step 5: Deploy the AppSync API
-Click on the "Settings" tab in the AppSync console, and under the "General settings," click on "API details." Deploy your API to a stage (e.g., "prod").
 
-Step 6: Connect Frontend with AWS Amplify
-Install AWS Amplify CLI and configure it with your AWS credentials:
+query ListAllVehicles {
+  listVehicles {
+    id
+    make
+    model
+    year
+  }
+}
+Click on "Run" to execute the queries.
 
-bash
-Copy code
-npm install -g @aws-amplify/cli
-amplify configure
-Initialize a new Amplify project:
+You should see responses with the vehicle data from your MongoDB collection.
 
-bash
-Copy code
-amplify init
-Follow the prompts and choose "GraphQL" as the service type. Connect your app to the AppSync API by running:
-
-bash
-Copy code
-amplify add api
-Follow the prompts to select your AppSync API.
-
-Step 7: Use GraphQL in Your App
-Now, you can use the Amplify library in your frontend code to interact with the AppSync API. For example, in a React component:
-
-jsx
-Copy code
-// VehicleList.js
-import React, { useState, useEffect } from 'react';
-import { API, graphqlOperation } from 'aws-amplify';
-
-const VehicleList = () => {
-  const [vehicles, setVehicles] = useState([]);
-
-  const fetchVehicles = async () => {
-    try {
-      const response = await API.graphql(graphqlOperation(`
-        query {
-          getVehicles {
-            _id
-            make
-            model
-            year
-          }
-        }
-      `));
-      setVehicles(response.data.getVehicles);
-    } catch (error) {
-      console.error('Error fetching vehicles', error);
-    }
-  };
-
-  useEffect(() => {
-    fetchVehicles();
-  }, []);
-
-  return (
-    <div>
-      <h1>Vehicle List</h1>
-      <ul>
-        {vehicles.map((vehicle) => (
-          <li key={vehicle._id}>{`${vehicle.year} ${vehicle.make} ${vehicle.model}`}</li>
-        ))}
-      </ul>
-    </div>
-  );
-};
-
-export default VehicleList;
-Step 8: Run Your App
-Run your app and test the integration with the AppSync API and MongoDB data:
-
-bash
-Copy code
-npm start
-This example provides a step-by-step guide for setting up GraphQL with AWS AppSync, connecting to MongoDB Atlas, and implementing resolvers. Adjust the code and configuration based on your specific MongoDB setup and schema.
-
-
-
-
-
+These steps outline a basic setup for reading vehicle-related data from MongoDB using AWS AppSync. Customize the schema, resolver code, and queries based on your specific use case and data model.
